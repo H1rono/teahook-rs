@@ -1,3 +1,8 @@
+## https://github.com/github/gitignore/blob/main/community/Nix.gitignore
+# Ignore build outputs from performing a nix-build or `nix build` command
+result
+result-*
+
 ## https://github.com/github/gitignore/blob/main/Go.gitignore
 # If you prefer the allow list template instead of the deny list, see community template:
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
