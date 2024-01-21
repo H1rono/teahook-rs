@@ -191,6 +191,11 @@ func go2rsFile(path string) {
 }
 
 func main() {
-	path := os.Args[1]
-	go2rsFile(path)
+	if len(os.Args) < 2 {
+		fmt.Println("usage: go2rs [<path>...]")
+		return
+	}
+	for _, path := range os.Args[1:] {
+		go2rsFile(path)
+	}
 }
