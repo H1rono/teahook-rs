@@ -12,6 +12,12 @@ import (
 	"github.com/samber/lo"
 )
 
+func eprintf(format string, args ...interface{}) {
+	if _, err := fmt.Fprintf(os.Stderr, format, args...); err != nil {
+		panic(err)
+	}
+}
+
 func renameType(x string) string {
 	switch x {
 	case "int":
@@ -40,6 +46,8 @@ func renameType(x string) string {
 		return "f64"
 	case "string":
 		return "String"
+	case "any":
+		return "serde_json::Value"
 	default:
 		return x
 	}
@@ -57,8 +65,8 @@ func renderTypeExpr(x ast.Expr) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		// remove reference
-		return ref, nil
+		// boxed
+		return fmt.Sprintf("Box<%s>", ref), nil
 	case *ast.ArrayType:
 		inner, err := renderTypeExpr(x.Elt)
 		if err != nil {
@@ -88,11 +96,14 @@ func renderTypeExpr(x ast.Expr) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		t, err := renderTypeExpr(x.Sel)
+		sel, err := renderTypeExpr(x.Sel)
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("%s::%s", parent, t), nil
+		if parent == "time" && sel == "Time" {
+			return "String", nil
+		}
+		return "", fmt.Errorf("unknown selector %s.%s", parent, sel)
 	default:
 		return "", fmt.Errorf("unknown type %T", x)
 	}
@@ -129,24 +140,59 @@ func renameField(x string) string {
 	switch x {
 	case "type", "Type":
 		return "r#type"
+	case "ref", "Ref":
+		return "r#ref"
 	default:
 		replaced := strings.ReplaceAll(x, "_", "")
 		replaced = strings.ReplaceAll(replaced, "ID", "Id")
 		replaced = strings.ReplaceAll(replaced, "URL", "Url")
+		replaced = strings.ReplaceAll(replaced, "HTML", "Html")
+		replaced = strings.ReplaceAll(replaced, "SHA", "Sha")
 		return toSnakeCase(replaced)
 	}
 }
 
+func renderEmbedTypeExprField(x ast.Expr) (string, error) {
+	if x == nil {
+		return "", fmt.Errorf("nil type")
+	}
+	switch x := x.(type) {
+	case *ast.Ident:
+		return renameField(x.Name), nil
+	case *ast.StarExpr:
+		ref, err := renderTypeExpr(x.X)
+		if err != nil {
+			return "", err
+		}
+		// unboxed
+		return renameField(ref), nil
+	default:
+		return "", fmt.Errorf("unknown type %T", x)
+	}
+}
+
 func renderStructInner(x *ast.StructType) string {
-	fields := lo.Map(x.Fields.List, func(f *ast.Field, _ int) string {
-		names := strings.Join(lo.Map(f.Names, func(n *ast.Ident, _ int) string {
-			return renameField(n.Name)
-		}), " ")
+	fields := lo.FilterMap(x.Fields.List, func(f *ast.Field, _ int) (string, bool) {
 		renderedType, err := renderTypeExpr(f.Type)
 		if err != nil {
-			return err.Error()
+			eprintf("failed to render field %s: %s\n", f.Names[0].Name, err)
+			return "", false
 		}
-		return fmt.Sprintf("    pub %s: %s,", names, renderedType)
+		if f.Names == nil || len(f.Names) == 0 {
+			renderedField, err := renderEmbedTypeExprField(f.Type)
+			if err != nil {
+				eprintf("failed to render field %s: %s\n", f.Names[0].Name, err)
+				return "", false
+			}
+			return fmt.Sprintf("    pub %s: %s,", renderedField, renderedType), true
+		}
+		name := renameField(f.Names[0].Name)
+		prefix := ""
+		if name == "self" {
+			name = "self_"
+			prefix = "#[serde(rename = \"self\")] "
+		}
+		return fmt.Sprintf("    %spub %s: %s,", prefix, name, renderedType), true
 	})
 	return strings.Join(fields, "\n")
 }
@@ -155,16 +201,14 @@ func renderTypeSpec(x *ast.TypeSpec) string {
 	comments := renderStructComment(x.Doc)
 	if s, ok := x.Type.(*ast.StructType); ok {
 		inner := renderStructInner(s)
-		derives := "#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]"
+		derives := "#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]"
 		ret := fmt.Sprintf("%s\n%s\npub struct %s {\n%s\n}", comments, derives, x.Name.Name, inner)
 		return ret
 	}
 	alias, err := renderTypeExpr(x.Type)
 	if err != nil {
 		e := err.Error()
-		if _, err := fmt.Fprintf(os.Stderr, "failed to render type %s: %s", x.Name.Name, e); err != nil {
-			panic(err)
-		}
+		eprintf("failed to render type %s: %s\n", x.Name.Name, e)
 		return ""
 	}
 	ret := fmt.Sprintf("%s\npub type %s = %s;", comments, x.Name.Name, alias)
