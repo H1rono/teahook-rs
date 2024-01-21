@@ -61,9 +61,14 @@
       in
       {
         devShells.default = craneLib.devShell {
+          checks = {
+            inherit rustBuild;
+          };
           packages = with pkgs; [ go_1_21 ];
           shellHook = ''
+            unset GOROOT
             unset GOPATH
+            unset GOTOOLDIR
           '';
         };
         packages = {
