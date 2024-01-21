@@ -1,9 +1,9 @@
-## https://github.com/github/gitignore/blob/main/community/Nix.gitignore
+## https://github.com/github/gitignore/blob/4488915eec0b3a45b5c63ead28f286819c0917de/community/Nix.gitignore
 # Ignore build outputs from performing a nix-build or `nix build` command
 result
 result-*
 
-## https://github.com/github/gitignore/blob/main/Go.gitignore
+## https://github.com/github/gitignore/blob/4488915eec0b3a45b5c63ead28f286819c0917de/Go.gitignore
 # If you prefer the allow list template instead of the deny list, see community template:
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 #
@@ -21,7 +21,7 @@ result-*
 *.out
 
 # Dependency directories (remove the comment below to include it)
-# vendor/
+vendor/
 
 # Go workspace file
 go.work
