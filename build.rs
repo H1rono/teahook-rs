@@ -11,6 +11,7 @@ use tar::Archive;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct GiteaMetadata {
     repository: String,
+    tag: String,
     version: String,
 }
 
@@ -52,8 +53,8 @@ fn fetch_gitea_source(gitea_root: &str, gitea: &GiteaMetadata) -> anyhow::Result
     let gitea_root = Path::new(gitea_root).canonicalize()?;
 
     let url = format!(
-        "https://github.com/{}/archive/refs/tags/v{}.tar.gz",
-        gitea.repository, gitea.version
+        "https://github.com/{}/archive/refs/tags/{}.tar.gz",
+        gitea.repository, gitea.tag
     );
     let res = minreq::get(&url)
         .send()
