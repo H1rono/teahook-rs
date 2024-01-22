@@ -98,18 +98,18 @@ func renderTypeExpr(x ast.Expr) (string, error) {
 		}
 		return fmt.Sprintf("HashMap<%s, %s>", key, value), nil
 	case *ast.SelectorExpr:
-		parent, err := renderTypeExpr(x.X)
-		if err != nil {
-			return "", err
+		parent, ok := x.X.(*ast.Ident)
+		if !ok {
+			return "", fmt.Errorf("unknown selector %T", x.X)
 		}
 		sel, err := renderTypeExpr(x.Sel)
 		if err != nil {
 			return "", err
 		}
-		if parent == "time" && sel == "Time" {
+		if parent.Name == "time" && sel == "Time" {
 			return "String", nil
 		}
-		return "", fmt.Errorf("unknown selector %s.%s", parent, sel)
+		return "", fmt.Errorf("unknown selector %s.%s", parent.Name, sel)
 	default:
 		return "", fmt.Errorf("unknown type %T", x)
 	}
