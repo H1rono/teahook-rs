@@ -115,13 +115,21 @@ func renderTypeExpr(x ast.Expr) (string, error) {
 	}
 }
 
-func renderStructComment(x *ast.CommentGroup) string {
-	if x == nil {
-		return ""
+func renderStructComment(comments, doccomments *ast.CommentGroup) string {
+	list := []string{}
+	if comments != nil && comments.List != nil {
+		comments := lo.Map(comments.List, func(c *ast.Comment, _ int) string {
+			return fmt.Sprintf("/%s", c.Text)
+		})
+		list = append(list, comments...)
 	}
-	return strings.Join(lo.Map(x.List, func(c *ast.Comment, _ int) string {
-		return fmt.Sprintf("/// %s", c.Text)
-	}), "\n")
+	if doccomments != nil && doccomments.List != nil {
+		doccomments := lo.Map(doccomments.List, func(c *ast.Comment, _ int) string {
+			return fmt.Sprintf("/// %s", c.Text)
+		})
+		list = append(list, doccomments...)
+	}
+	return strings.Join(list, "\n")
 }
 
 // https://zenn.dev/ohnishi/articles/1c84376fe89f70888b9c
@@ -205,12 +213,12 @@ func renderStructInner(x *ast.StructType) string {
 }
 
 func renderTypeSpec(x *ast.TypeSpec) string {
-	comments := renderStructComment(x.Doc)
+	comments := renderStructComment(x.Comment, x.Doc)
 	if s, ok := x.Type.(*ast.StructType); ok {
 		name := renameType(x.Name.Name)
 		inner := renderStructInner(s)
 		derives := "#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]"
-		ret := fmt.Sprintf("%s\n%s\npub struct %s {\n%s\n}", comments, derives, name, inner)
+		ret := fmt.Sprintf("%s\n%s\npub struct %s {\n%s\n}\n", comments, derives, name, inner)
 		return ret
 	}
 	name := renameType(x.Name.Name)
@@ -226,18 +234,30 @@ func renderTypeSpec(x *ast.TypeSpec) string {
 
 func go2rsFile(path string) {
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, path, nil, 0)
+	f, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+	lastComments := []*ast.Comment{}
 	ast.Inspect(f, func(n ast.Node) bool {
+		if n == nil {
+			return true
+		}
 		switch x := n.(type) {
+		case *ast.Comment:
+			lastComments = append(lastComments, x)
 		case *ast.TypeSpec:
 			if x == nil {
 				return true
 			}
+			if len(lastComments) > 0 {
+				x.Comment = &ast.CommentGroup{List: lastComments}
+			}
 			fmt.Println(renderTypeSpec(x))
+			lastComments = []*ast.Comment{}
+		default:
+			lastComments = []*ast.Comment{}
 		}
 		return true
 	})
