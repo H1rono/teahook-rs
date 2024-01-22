@@ -28,6 +28,13 @@
         craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
         src = craneLib.cleanCargoSource (craneLib.path ./.);
 
+        giteaSource = pkgs.fetchFromGitHub {
+          owner = "go-gitea";
+          repo = "gitea";
+          rev = "v1.21.4";
+          hash = "sha256-nQrxWDydQOuR6i1c9YOA0q/HBKOluiLcwkQDxjdqdj4=";
+        };
+
         rustCommonArgs = {
           inherit src;
           strictDeps = true;
@@ -57,6 +64,8 @@
         cargoArtifacts = craneLib.buildDepsOnly rustCommonArgs;
         rustBuild = craneLib.buildPackage (rustCommonArgs // {
           inherit cargoArtifacts;
+          GITEA_SOURCE_ROOT = "${giteaSource}";
+          GITEA_TRANSPILER_PATH = "${goBuild}/bin/teahook-rs";
         });
       in
       {
@@ -72,7 +81,7 @@
           '';
         };
         packages = {
-          default = goBuild;
+          default = rustBuild;
           rustDeps = cargoArtifacts;
           inherit goBuild rustBuild;
         };
