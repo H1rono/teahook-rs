@@ -49,9 +49,15 @@
             darwin.Security
             darwin.apple_sdk.frameworks.SystemConfiguration
           ];
+          doCheck = true;
 
           # Additional environment variables can be set directly
           CARGO_PROFILE = "";
+        };
+        rustBuildArgs = rustCommonArgs // {
+          inherit cargoArtifacts;
+          GITEA_SOURCE_ROOT = "${giteaSource}";
+          GITEA_TRANSPILER_PATH = "${goBuild}/bin/teahook-rs";
         };
 
         goBuild = pkgs.buildGoModule {
@@ -62,10 +68,26 @@
         };
 
         cargoArtifacts = craneLib.buildDepsOnly rustCommonArgs;
-        rustBuild = craneLib.buildPackage (rustCommonArgs // {
+        rustBuild = craneLib.buildPackage (rustBuildArgs // {
           inherit cargoArtifacts;
-          GITEA_SOURCE_ROOT = "${giteaSource}";
-          GITEA_TRANSPILER_PATH = "${goBuild}/bin/teahook-rs";
+        });
+        rustBuildFull = craneLib.buildPackage (rustBuildArgs // {
+          inherit cargoArtifacts;
+          doInstallCargoArtifacts = true;
+        });
+        doc = craneLib.cargoDoc (rustBuildArgs // {
+          cargoArtifacts = rustBuildFull;
+          postBuild = ''
+            cat > ./target/doc/index.html << EOF
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <meta http-equiv="Refresh" content="0; URL=./teahook_rs" />
+              </head>
+              <body></body>
+            </html>
+            EOF
+          '';
         });
       in
       {
@@ -83,7 +105,7 @@
         packages = {
           default = rustBuild;
           rustDeps = cargoArtifacts;
-          inherit goBuild rustBuild;
+          inherit goBuild rustBuild rustBuildFull doc;
         };
       });
 }
