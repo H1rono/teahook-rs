@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tar::Archive;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct GiteaMetadata {
+struct GiteaSourceInfo {
     repository: String,
     tag: String,
     version: String,
@@ -17,7 +17,7 @@ struct GiteaMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PkgMetadata {
-    gitea: GiteaMetadata,
+    gitea: GiteaSourceInfo,
 }
 
 fn read_package_metadata(manifest_dir: &str, package_name: &str) -> anyhow::Result<PkgMetadata> {
@@ -48,7 +48,7 @@ fn try_exists(path: &str) -> io::Result<bool> {
     path.try_exists()
 }
 
-fn fetch_gitea_source(gitea_root: &str, gitea: &GiteaMetadata) -> anyhow::Result<()> {
+fn fetch_gitea_source(gitea_root: &str, gitea: &GiteaSourceInfo) -> anyhow::Result<()> {
     fs::create_dir_all(gitea_root)?;
     let gitea_root = Path::new(gitea_root).canonicalize()?;
 
@@ -128,7 +128,13 @@ fn main() -> anyhow::Result<()> {
     let transpile_out = format!("{}/types.rs", out_dir);
 
     if !try_exists(&gitea_root)? {
-        fetch_gitea_source(&gitea_root, &metadata.gitea)?;
+        let gitea = metadata.gitea;
+        let gitea = GiteaSourceInfo {
+            repository: env_var("GITEA_SOURCE_REPOSITORY").unwrap_or(gitea.repository),
+            tag: env_var("GITEA_SOURCE_TAG").unwrap_or(gitea.tag),
+            version: env_var("GITEA_SOURCE_VERSION").unwrap_or(gitea.version),
+        };
+        fetch_gitea_source(&gitea_root, &gitea)?;
     }
 
     if !try_exists(&transpiler_path)? {
