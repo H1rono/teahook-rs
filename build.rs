@@ -5,7 +5,36 @@ use std::{env, fs, io, process};
 
 use anyhow::Context;
 use flate2::bufread::GzDecoder;
+use serde::{Deserialize, Serialize};
 use tar::Archive;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct GiteaMetadata {
+    repository: String,
+    version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PkgMetadata {
+    gitea: GiteaMetadata,
+}
+
+fn read_package_metadata(manifest_dir: &str, package_name: &str) -> anyhow::Result<PkgMetadata> {
+    let metadata = cargo_metadata::MetadataCommand::new()
+        .manifest_path(format!("{}/Cargo.toml", manifest_dir))
+        .no_deps()
+        .exec()?;
+    let package = metadata
+        .packages
+        .into_iter()
+        .find(|p| p.name == package_name)
+        .ok_or(anyhow::anyhow!(
+            "no metadata found for package `{}`",
+            package_name
+        ))?;
+    let pkg_metadata = serde_json::from_value(package.metadata)?;
+    Ok(pkg_metadata)
+}
 
 fn env_var(name: &str) -> Result<String, env::VarError> {
     println!("cargo:rerun-if-env-changed={}", name);
@@ -18,14 +47,17 @@ fn try_exists(path: &str) -> io::Result<bool> {
     path.try_exists()
 }
 
-fn fetch_gitea_source(gitea_root: &str) -> anyhow::Result<()> {
+fn fetch_gitea_source(gitea_root: &str, gitea: &GiteaMetadata) -> anyhow::Result<()> {
     fs::create_dir_all(gitea_root)?;
     let gitea_root = Path::new(gitea_root).canonicalize()?;
 
-    let url = "https://github.com/go-gitea/gitea/archive/refs/tags/v1.21.4.tar.gz";
-    let res = minreq::get(url)
+    let url = format!(
+        "https://github.com/{}/archive/refs/tags/v{}.tar.gz",
+        gitea.repository, gitea.version
+    );
+    let res = minreq::get(&url)
         .send()
-        .with_context(|| format!("could not GET {}", url))?;
+        .with_context(|| format!("could not GET {}", &url))?;
     if res.status_code < 200 || res.status_code >= 300 {
         anyhow::bail!(
             "failed to fetch gitea source with status code {}",
@@ -37,13 +69,14 @@ fn fetch_gitea_source(gitea_root: &str) -> anyhow::Result<()> {
     let tar = GzDecoder::new(tar_gz);
     let mut archive = Archive::new(tar);
 
+    let entry_prefix = format!("gitea-{}", gitea.version);
     let entries = archive
         .entries()?
         .map(|e| -> anyhow::Result<_> {
             let e = e?;
             let path = e
                 .path()?
-                .strip_prefix("gitea-1.21.4")
+                .strip_prefix(&entry_prefix)
                 .map(PathBuf::from)
                 .ok();
             Ok((path, e))
@@ -85,6 +118,8 @@ fn build_transpiler(
 fn main() -> anyhow::Result<()> {
     let out_dir = env_var("OUT_DIR").context("could not get environment variable `OUT_DIR`")?;
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let package_name = env!("CARGO_PKG_NAME");
+    let metadata = read_package_metadata(manifest_dir, package_name)?;
     let gitea_root = env_var("GITEA_SOURCE_ROOT").unwrap_or_else(|_| format!("{}/gitea", out_dir));
     let go_structs_dir = format!("{}/modules/structs", gitea_root);
     let transpiler_path =
@@ -92,7 +127,7 @@ fn main() -> anyhow::Result<()> {
     let transpile_out = format!("{}/types.rs", out_dir);
 
     if !try_exists(&gitea_root)? {
-        fetch_gitea_source(&gitea_root)?;
+        fetch_gitea_source(&gitea_root, &metadata.gitea)?;
     }
 
     if !try_exists(&transpiler_path)? {
