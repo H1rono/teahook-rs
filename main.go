@@ -154,6 +154,7 @@ func renameField(x string) string {
 		replaced = strings.ReplaceAll(replaced, "URL", "Url")
 		replaced = strings.ReplaceAll(replaced, "HTML", "Html")
 		replaced = strings.ReplaceAll(replaced, "SHA", "Sha")
+		replaced = strings.ReplaceAll(replaced, "SSH", "Ssh")
 		return toSnakeCase(replaced)
 	}
 }
