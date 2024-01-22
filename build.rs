@@ -1,3 +1,6 @@
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
+use std::str::from_utf8;
 use std::{env, fs, io, process};
 
 use anyhow::Context;
@@ -11,13 +14,13 @@ fn env_var(name: &str) -> Result<String, env::VarError> {
 
 fn try_exists(path: &str) -> io::Result<bool> {
     println!("cargo:rerun-if-changed={}", path);
-    let path = std::path::Path::new(path);
+    let path = Path::new(path);
     path.try_exists()
 }
 
 fn fetch_gitea_source(gitea_root: &str) -> anyhow::Result<()> {
     fs::create_dir_all(gitea_root)?;
-    let gitea_root = std::path::Path::new(gitea_root).canonicalize()?;
+    let gitea_root = Path::new(gitea_root).canonicalize()?;
 
     let url = "https://github.com/go-gitea/gitea/archive/refs/tags/v1.21.4.tar.gz";
     let res = minreq::get(url)
@@ -41,7 +44,7 @@ fn fetch_gitea_source(gitea_root: &str) -> anyhow::Result<()> {
             let path = e
                 .path()?
                 .strip_prefix("gitea-1.21.4")
-                .map(|p| p.to_path_buf())
+                .map(PathBuf::from)
                 .ok();
             Ok((path, e))
         })
@@ -52,6 +55,29 @@ fn fetch_gitea_source(gitea_root: &str) -> anyhow::Result<()> {
     for r in entries {
         let (p, mut e) = r?;
         e.unpack(p)?;
+    }
+    Ok(())
+}
+
+fn gopath() -> which::Result<PathBuf> {
+    println!("cargo:rerun-if-env-changed=PATH");
+    which::which("go")
+}
+
+fn build_transpiler(
+    current_dir: &impl AsRef<Path>,
+    gopath: &impl AsRef<OsStr>,
+    transpiler_path: &impl AsRef<OsStr>,
+) -> anyhow::Result<()> {
+    let out = process::Command::new(gopath)
+        .arg("build")
+        .arg("-o")
+        .arg(transpiler_path)
+        .current_dir(current_dir)
+        .output()?;
+    if !out.status.success() {
+        let stderr = from_utf8(&out.stderr)?;
+        anyhow::bail!("failed to build transpiler:\n{}", stderr);
     }
     Ok(())
 }
@@ -70,10 +96,8 @@ fn main() -> anyhow::Result<()> {
     }
 
     if !try_exists(&transpiler_path)? {
-        anyhow::bail!(
-            "file not found in path `{}`. did you run `go build`?",
-            transpiler_path
-        );
+        let gopath = gopath()?;
+        build_transpiler(&current_dir, &gopath, &transpiler_path)?;
     }
 
     let struct_files = fs::read_dir(&go_structs_dir)
@@ -84,10 +108,10 @@ fn main() -> anyhow::Result<()> {
         .args(struct_files)
         .output()?;
     if !transpile_output.status.success() {
-        let stderr = std::str::from_utf8(&transpile_output.stderr)?;
+        let stderr = from_utf8(&transpile_output.stderr)?;
         anyhow::bail!("transpling failed:\n{}", stderr);
     }
-    let transpiled = std::str::from_utf8(&transpile_output.stdout)?;
+    let transpiled = from_utf8(&transpile_output.stdout)?;
     fs::write(transpile_out, transpiled)?;
     Ok(())
 }
