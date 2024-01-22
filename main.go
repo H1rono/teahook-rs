@@ -46,10 +46,16 @@ func renameType(x string) string {
 		return "f64"
 	case "string":
 		return "String"
+	case "bool":
+		return "bool"
 	case "any":
 		return "serde_json::Value"
 	default:
-		return x
+		runes := []rune(x)
+		if runes[0] >= 'a' && runes[0] <= 'z' {
+			runes[0] = unicode.ToUpper(runes[0])
+		}
+		return string(runes)
 	}
 }
 
@@ -200,18 +206,20 @@ func renderStructInner(x *ast.StructType) string {
 func renderTypeSpec(x *ast.TypeSpec) string {
 	comments := renderStructComment(x.Doc)
 	if s, ok := x.Type.(*ast.StructType); ok {
+		name := renameType(x.Name.Name)
 		inner := renderStructInner(s)
 		derives := "#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]"
-		ret := fmt.Sprintf("%s\n%s\npub struct %s {\n%s\n}", comments, derives, x.Name.Name, inner)
+		ret := fmt.Sprintf("%s\n%s\npub struct %s {\n%s\n}", comments, derives, name, inner)
 		return ret
 	}
+	name := renameType(x.Name.Name)
 	alias, err := renderTypeExpr(x.Type)
 	if err != nil {
 		e := err.Error()
-		eprintf("failed to render type %s: %s\n", x.Name.Name, e)
+		eprintf("failed to render type %s: %s\n", name, e)
 		return ""
 	}
-	ret := fmt.Sprintf("%s\npub type %s = %s;", comments, x.Name.Name, alias)
+	ret := fmt.Sprintf("%s\npub type %s = %s;", comments, name, alias)
 	return ret
 }
 
