@@ -65,9 +65,9 @@ fn gopath() -> which::Result<PathBuf> {
 }
 
 fn build_transpiler(
-    current_dir: &impl AsRef<Path>,
-    gopath: &impl AsRef<OsStr>,
-    transpiler_path: &impl AsRef<OsStr>,
+    current_dir: impl AsRef<Path>,
+    gopath: impl AsRef<OsStr>,
+    transpiler_path: impl AsRef<OsStr>,
 ) -> anyhow::Result<()> {
     let out = process::Command::new(gopath)
         .arg("build")
@@ -83,12 +83,12 @@ fn build_transpiler(
 }
 
 fn main() -> anyhow::Result<()> {
-    let current_dir = env::current_dir()?;
     let out_dir = env_var("OUT_DIR").context("could not get environment variable `OUT_DIR`")?;
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let gitea_root = env_var("GITEA_SOURCE_ROOT").unwrap_or_else(|_| format!("{}/gitea", out_dir));
     let go_structs_dir = format!("{}/modules/structs", gitea_root);
-    let transpiler_path = env_var("GITEA_TRANSPILER_PATH")
-        .unwrap_or_else(|_| format!("{}/teahook-rs", current_dir.display()));
+    let transpiler_path =
+        env_var("GITEA_TRANSPILER_PATH").unwrap_or_else(|_| format!("{}/teahook-rs", manifest_dir));
     let transpile_out = format!("{}/types.rs", out_dir);
 
     if !try_exists(&gitea_root)? {
@@ -97,7 +97,7 @@ fn main() -> anyhow::Result<()> {
 
     if !try_exists(&transpiler_path)? {
         let gopath = gopath()?;
-        build_transpiler(&current_dir, &gopath, &transpiler_path)?;
+        build_transpiler(manifest_dir, gopath, &transpiler_path)?;
     }
 
     let struct_files = fs::read_dir(&go_structs_dir)
