@@ -184,13 +184,6 @@ func renderEmbedTypeExprField(x ast.Expr) (string, error) {
 	switch x := x.(type) {
 	case *ast.Ident:
 		return renameField(x.Name), nil
-	case *ast.StarExpr:
-		ref, err := renderTypeExpr(x.X)
-		if err != nil {
-			return "", err
-		}
-		// unboxed
-		return renameField(ref), nil
 	default:
 		return "", fmt.Errorf("unknown type %T", x)
 	}
