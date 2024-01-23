@@ -81,15 +81,16 @@ func renderTypeExpr(x ast.Expr) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		// boxed
-		return fmt.Sprintf("Box<%s>", ref), nil
+		// opt-boxed
+		return fmt.Sprintf("Option<Box<%s>>", ref), nil
 	case *ast.ArrayType:
 		inner, err := renderTypeExpr(x.Elt)
 		if err != nil {
 			return "", err
 		}
 		if x.Len == nil {
-			return fmt.Sprintf("Vec<%s>", inner), nil
+			// slice can be null
+			return fmt.Sprintf("Option<Vec<%s>>", inner), nil
 		} else {
 			ln, err := renderTypeExpr(x.Len)
 			if err != nil {
