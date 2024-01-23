@@ -82,7 +82,7 @@
             <!DOCTYPE html>
             <html>
               <head>
-                <meta http-equiv="Refresh" content="0; URL=./teahook_rs" />
+                <meta http-equiv="Refresh" content="0; URL=./teahook" />
               </head>
               <body></body>
             </html>
