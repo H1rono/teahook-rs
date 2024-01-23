@@ -249,9 +249,9 @@ func renderField(x *ast.Field) (string, error) {
 			tag = &slf
 		}
 	}
-	prefix := ""
+	prefix := "#[serde(default)]\n    "
 	if tag != nil {
-		prefix = fmt.Sprintf("#[serde(rename = \"%s\")]\n    ", *tag)
+		prefix = fmt.Sprintf("#[serde(default, rename = \"%s\")]\n    ", *tag)
 	}
 	return fmt.Sprintf("    %spub %s: %s,", prefix, name, renderedType), nil
 }
@@ -273,7 +273,7 @@ func renderTypeSpec(x *ast.TypeSpec) string {
 	if s, ok := x.Type.(*ast.StructType); ok {
 		name := renameType(x.Name.Name)
 		inner := renderStructInner(s)
-		derives := "#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]"
+		derives := "#[derive(Debug, Clone, PartialEq, Default, serde::Serialize, serde::Deserialize)]"
 		ret := fmt.Sprintf("%s\n%s\npub struct %s {\n%s\n}\n", comments, derives, name, inner)
 		return ret
 	}
