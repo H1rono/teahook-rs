@@ -217,7 +217,7 @@ func renderField(x *ast.Field) (string, error) {
 	if x.Names == nil || len(x.Names) == 0 {
 		renderedField, err := renderEmbedTypeExprField(x.Type)
 		if err != nil {
-			return "", fmt.Errorf("failed to render field %s: %s", x.Names[0].Name, err)
+			return "", fmt.Errorf("failed to render field: %s", err)
 		}
 		return fmt.Sprintf("    pub %s: %s,", renderedField, renderedType), nil
 	}
