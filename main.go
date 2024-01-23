@@ -6,11 +6,21 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"reflect"
+	"strconv"
 	"strings"
 	"unicode"
 
 	"github.com/samber/lo"
 )
+
+type jsonTagNotFoundError struct {
+	tag string
+}
+
+func (e *jsonTagNotFoundError) Error() string {
+	return fmt.Sprintf("failed to lookup json tag in %s", e.tag)
+}
 
 func eprintf(format string, args ...interface{}) {
 	if _, err := fmt.Fprintf(os.Stderr, format, args...); err != nil {
@@ -186,28 +196,81 @@ func renderEmbedTypeExprField(x ast.Expr) (string, error) {
 	}
 }
 
+func extractJsonTagValue(x *ast.BasicLit) (string, error) {
+	if x == nil {
+		return "", fmt.Errorf("nil tag")
+	}
+	if x.Kind != token.STRING {
+		return "", fmt.Errorf("unknown tag %s", x.Value)
+	}
+	tag, err := strconv.Unquote(x.Value)
+	if err != nil {
+		return "", fmt.Errorf("failed to unquote tag %s: %s", x.Value, err)
+	}
+	stag := reflect.StructTag(tag)
+	result, ok := stag.Lookup("json")
+	if !ok {
+		return "", &jsonTagNotFoundError{x.Value}
+	}
+	return result, nil
+}
+
+func renderField(x *ast.Field) (string, error) {
+	renderedType, err := renderTypeExpr(x.Type)
+	if err != nil {
+		return "", fmt.Errorf("failed to render field %s: %s", x.Names[0].Name, err)
+	}
+
+	if x.Names == nil || len(x.Names) == 0 {
+		renderedField, err := renderEmbedTypeExprField(x.Type)
+		if err != nil {
+			return "", fmt.Errorf("failed to render field %s: %s", x.Names[0].Name, err)
+		}
+		return fmt.Sprintf("    pub %s: %s,", renderedField, renderedType), nil
+	}
+
+	name := renameField(x.Names[0].Name)
+	var tag *string
+	if tagValue, err := extractJsonTagValue(x.Tag); err != nil {
+		if _, ok := err.(*jsonTagNotFoundError); !ok {
+			return "", fmt.Errorf("failed to render field %s: %s", x.Names[0].Name, err)
+		}
+	} else {
+		if tagValue == "-" {
+			return fmt.Sprintf("    // field %s is omitted", name), nil
+		}
+		splitted := strings.Split(tagValue, ",")
+		omitempty := lo.Contains(splitted, "omitempty")
+		if omitempty {
+			tagValue = strings.Join(lo.Filter(splitted, func(s string, _ int) bool {
+				return s != "omitempty"
+			}), ",")
+			renderedType = fmt.Sprintf("Option<%s>", renderedType)
+		}
+		tag = &tagValue
+	}
+	if name == "self" {
+		name = "self_"
+		if tag == nil {
+			slf := "self"
+			tag = &slf
+		}
+	}
+	prefix := ""
+	if tag != nil {
+		prefix = fmt.Sprintf("#[serde(rename = \"%s\")]\n    ", *tag)
+	}
+	return fmt.Sprintf("    %spub %s: %s,", prefix, name, renderedType), nil
+}
+
 func renderStructInner(x *ast.StructType) string {
 	fields := lo.FilterMap(x.Fields.List, func(f *ast.Field, _ int) (string, bool) {
-		renderedType, err := renderTypeExpr(f.Type)
+		field, err := renderField(f)
 		if err != nil {
-			eprintf("failed to render field %s: %s\n", f.Names[0].Name, err)
+			eprintf("failed to render field: %s\n", err)
 			return "", false
 		}
-		if f.Names == nil || len(f.Names) == 0 {
-			renderedField, err := renderEmbedTypeExprField(f.Type)
-			if err != nil {
-				eprintf("failed to render field %s: %s\n", f.Names[0].Name, err)
-				return "", false
-			}
-			return fmt.Sprintf("    pub %s: %s,", renderedField, renderedType), true
-		}
-		name := renameField(f.Names[0].Name)
-		prefix := ""
-		if name == "self" {
-			name = "self_"
-			prefix = "#[serde(rename = \"self\")] "
-		}
-		return fmt.Sprintf("    %spub %s: %s,", prefix, name, renderedType), true
+		return field, true
 	})
 	return strings.Join(fields, "\n")
 }
