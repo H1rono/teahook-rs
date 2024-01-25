@@ -239,7 +239,9 @@ func renderField(x *ast.Field) (string, error) {
 			tagValue = strings.Join(lo.Filter(splitted, func(s string, _ int) bool {
 				return s != "omitempty"
 			}), ",")
-			renderedType = fmt.Sprintf("Option<%s>", renderedType)
+			if !strings.HasPrefix(renderedType, "Option<") {
+				renderedType = fmt.Sprintf("Option<%s>", renderedType)
+			}
 		}
 		tag = &tagValue
 	}
