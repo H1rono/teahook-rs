@@ -59,6 +59,23 @@
         "type": "github"
       }
     },
+    "gitea": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1705459610,
+        "narHash": "sha256-nQrxWDydQOuR6i1c9YOA0q/HBKOluiLcwkQDxjdqdj4=",
+        "owner": "go-gitea",
+        "repo": "gitea",
+        "rev": "f4923854f660c75f75592b9506c0471475ecc7cf",
+        "type": "github"
+      },
+      "original": {
+        "owner": "go-gitea",
+        "ref": "v1.21.4",
+        "repo": "gitea",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1705781397,
@@ -80,6 +97,7 @@
         "crane": "crane",
         "fenix": "fenix",
         "flake-utils": "flake-utils",
+        "gitea": "gitea",
         "nixpkgs": "nixpkgs"
       }
     },
