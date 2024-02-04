@@ -19,9 +19,12 @@
       let
         pkgs = import nixpkgs {
           inherit system;
+          overlays = [
+            fenix.overlays.default
+          ];
         };
         inherit (pkgs) lib;
-        toolchain = fenix.packages.${system}.fromToolchainFile {
+        toolchain = pkgs.fenix.fromToolchainFile {
           file = ./rust-toolchain.toml;
           sha256 = "sha256-SXRtAuO4IqNOQq+nLbrsDFbVk+3aVA8NNpSZsKlVH/8=";
         };
