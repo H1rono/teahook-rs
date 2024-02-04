@@ -19,76 +19,52 @@
   };
 
   outputs = { self, nixpkgs, flake-utils, fenix, crane, gitea, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
+    {
+      overlays.rust-toolchain = final: prev: rec {
+        rust-toolchain = prev.callPackage ./nix/rust-toolchain.nix { };
+      };
+      overlays.crane = final: prev: {
+        crane = prev.callPackage crane { };
+      };
+      overlays.craneLib = final: prev: {
+        craneLib = prev.callPackage ./nix/craneLib.nix { };
+      };
+      overlays.goBuild = final: prev: {
+        goBuild = prev.callPackage ./nix/goBuild.nix { };
+      };
+      overlays.rustBuild = final: prev: {
+        rustBuild = prev.callPackage ./nix/rustBuild.nix { inherit gitea; };
+      };
+      overlays.rustBuildFull = final: prev: {
+        rustBuildFull = prev.callPackage ./nix/rustBuildFull.nix { inherit gitea; };
+      };
+      overlays.cargoDoc = final: prev: {
+        cargoDoc = prev.callPackage ./nix/cargoDoc.nix { inherit gitea; };
+      };
+    } // flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
           inherit system;
           overlays = [
             fenix.overlays.default
+            self.overlays.rust-toolchain
+            self.overlays.crane
+            self.overlays.craneLib
+            self.overlays.goBuild
+            self.overlays.rustBuild
+            self.overlays.cargoDoc
           ];
         };
-        inherit (pkgs) lib;
-        toolchain = pkgs.fenix.fromToolchainFile {
-          file = ./rust-toolchain.toml;
-          sha256 = "sha256-SXRtAuO4IqNOQq+nLbrsDFbVk+3aVA8NNpSZsKlVH/8=";
-        };
-        craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
+        inherit (pkgs) lib goBuild craneLib;
+        toolchain = pkgs.rust-toolchain;
         src = craneLib.cleanCargoSource (craneLib.path ./.);
 
-        rustCommonArgs = {
-          inherit src;
-          strictDeps = true;
-          nativeBuildInputs = [ pkgs.pkg-config ];
-          # Common arguments can be set here to avoid repeating them later
-          buildInputs = with pkgs; [
-            # Add additional build inputs here
-            openssl
-          ] ++ lib.optionals stdenvNoCC.isDarwin [
-            # Additional darwin specific inputs can be set here
-            libiconv
-            darwin.Security
-            darwin.apple_sdk.frameworks.SystemConfiguration
-          ];
-          doCheck = true;
-
-          # Additional environment variables can be set directly
-          CARGO_PROFILE = "";
+        cargoArtifacts = import ./nix/cargoArtifacts.nix {
+          inherit system pkgs craneLib;
         };
-        rustBuildArgs = rustCommonArgs // {
-          inherit cargoArtifacts;
-          GITEA_SOURCE_ROOT = "${gitea}";
-          GITEA_TRANSPILER_PATH = "${goBuild}/bin/teahook-rs";
-        };
-
-        goBuild = pkgs.buildGoModule {
-          pname = "teahook-rs";
-          version = "0.1.0";
-          vendorHash = "sha256-1gM31i5NIZClDp26D4YCyHcbyZlp1eCR82GACy3SCmc=";
-          src = ./.;
-        };
-
-        cargoArtifacts = craneLib.buildDepsOnly rustCommonArgs;
-        rustBuild = craneLib.buildPackage (rustBuildArgs // {
-          inherit cargoArtifacts;
-        });
-        rustBuildFull = craneLib.buildPackage (rustBuildArgs // {
-          inherit cargoArtifacts;
-          doInstallCargoArtifacts = true;
-        });
-        doc = craneLib.cargoDoc (rustBuildArgs // {
-          cargoArtifacts = rustBuildFull;
-          postBuild = ''
-            cat > ./target/doc/index.html << EOF
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <meta http-equiv="Refresh" content="0; URL=./teahook" />
-              </head>
-              <body></body>
-            </html>
-            EOF
-          '';
-        });
+        rustBuild = pkgs.rustBuild;
+        rustBuildFull = pkgs.rustBuildFull;
+        doc = pkgs.cargoDoc;
       in
       {
         devShells.default = craneLib.devShell {
